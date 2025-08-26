@@ -145,6 +145,12 @@ class BC(PolicyAlgo):
                 info.update(step_info)
 
         return info
+    
+    def train_on_batch_functional(self, batch, model_weights, model_buffers):
+        info = super(BC, self).train_on_batch_functional(batch, model_weights, model_buffers)
+        predictions = self._functional_forward_training(batch, model_weights, model_buffers)
+        losses = self._functional_compute_losses(predictions, batch)
+        return losses
 
     def _forward_training(self, batch):
         """
@@ -162,6 +168,17 @@ class BC(PolicyAlgo):
         actions = self.nets["policy"](obs_dict=batch["obs"], goal_dict=batch["goal_obs"])
         predictions["actions"] = actions
         return predictions
+
+    def _functional_forward_training(self, batch, model_weights, model_buffers):
+        actions: torch.Tensor = torch.func.functional_call(
+            self.nets["policy"],
+            (model_weights, model_buffers),
+            (batch["obs"]),
+            {
+                "goal_dict": batch["goal_obs"] if "goal_obs" in batch else None
+            }
+        )
+        return actions
 
     def _compute_losses(self, predictions, batch):
         """
@@ -192,6 +209,35 @@ class BC(PolicyAlgo):
         action_loss = sum(action_losses)
         losses["action_loss"] = action_loss
         return losses
+
+    def _functional_compute_losses(self, predictions, batch):
+        """
+        Internal helper function for BC algo class. Compute losses based on
+        network outputs in @predictions dict, using reference labels in @batch.
+
+        Args:
+            predictions (dict): dictionary containing network outputs, from @_functional_forward_training
+            batch (dict): dictionary with torch.Tensors sampled
+                from a data loader and filtered by @process_batch_for_training
+
+        Returns:
+            losses (dict): dictionary of losses computed over the batch
+        """
+        losses = OrderedDict()
+        a_target = batch["action"]
+        actions = predictions
+        losses["l2_loss"] = nn.MSELoss()(actions, a_target)
+        losses["l1_loss"] = nn.SmoothL1Loss()(actions, a_target)
+        # cosine direction loss on eef delta position
+        losses["cos_loss"] = LossUtils.cosine_loss(actions[..., :3], a_target[..., :3])
+
+        action_losses = [
+            self.algo_config.loss.l2_weight * losses["l2_loss"],
+            self.algo_config.loss.l1_weight * losses["l1_loss"],
+            self.algo_config.loss.cos_weight * losses["cos_loss"],
+        ]
+        action_loss = sum(action_losses)
+        return action_loss
 
     def _train_step(self, losses):
         """
@@ -303,6 +349,21 @@ class BC_Gaussian(BC):
             log_probs=log_probs,
         )
         return predictions
+    
+    def _functional_forward_training(self, batch, model_weights, model_buffers):
+
+        dist = torch.func.functional_call(
+            self.nets["policy"],
+            (model_weights, model_buffers),
+            (batch["obs"]),
+            {
+                "goal_dict": batch["goal_obs"] if "goal_obs" in batch else None
+            }
+        )
+
+        log_probs = dist.log_prob(batch["actions"])
+
+        return log_probs
 
     def _compute_losses(self, predictions, batch):
         """
@@ -324,6 +385,11 @@ class BC_Gaussian(BC):
             log_probs=-action_loss,
             action_loss=action_loss,
         )
+    
+    def _functional_compute_losses(self, predictions, batch):
+        # loss is just negative log-likelihood of action targets
+        action_loss = -predictions.mean()
+        return action_loss
 
     def log_info(self, info):
         """
@@ -623,7 +689,6 @@ class BC_RNN_GMM(BC_RNN):
             obs_dict=batch["obs"], 
             goal_dict=batch["goal_obs"],
         )
-
         # make sure that this is a batch of multivariate action distributions, so that
         # the log probability computation will be correct
         assert len(dists.batch_shape) == 2 # [B, T]
@@ -633,6 +698,24 @@ class BC_RNN_GMM(BC_RNN):
             log_probs=log_probs,
         )
         return predictions
+    
+
+    def _functional_forward_training(self, batch, model_weights, model_buffers):
+        # Use the policy module directly, then call log_prob on the result
+        dist = torch.func.functional_call(
+            self.nets["policy"],
+            (model_weights, model_buffers),
+            (batch["obs"]),
+            {
+                "goal_dict": batch["goal_obs"] if "goal_obs" in batch else None
+            }
+        )
+        log_probs = dist.log_prob(batch["action"])
+        print(log_probs.shape)
+        # Squeeze singleton time dimension if present
+        if log_probs.dim() == 3 and log_probs.shape[1] == 1:
+            log_probs = log_probs.squeeze(1)
+        return log_probs
 
     def _compute_losses(self, predictions, batch):
         """
@@ -654,6 +737,10 @@ class BC_RNN_GMM(BC_RNN):
             log_probs=-action_loss,
             action_loss=action_loss,
         )
+    
+    def _functional_compute_losses(self, predictions, batch):
+        action_loss = -predictions.mean()
+        return action_loss
 
     def log_info(self, info):
         """

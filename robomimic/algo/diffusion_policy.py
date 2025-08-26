@@ -241,6 +241,76 @@ class DiffusionPolicyUNet(PolicyAlgo):
 
         return info
     
+    def train_on_batch_functional(self, batch, model_weights, model_buffers, timesteps):
+        """
+        Training on a single batch of data.
+
+        Args:
+            batch (dict): dictionary with torch.Tensors sampled
+                from a data loader and filtered by @process_batch_for_training
+
+            epoch (int): epoch number - required by some Algos that need
+                to perform staged training and early stopping
+
+            validate (bool): if True, don't perform any learning updates.
+
+        Returns:
+            info (dict): dictionary of relevant inputs, outputs, and losses
+                that might be relevant for logging
+        """
+        To = self.algo_config.horizon.observation_horizon
+        Ta = self.algo_config.horizon.action_horizon
+        Tp = self.algo_config.horizon.prediction_horizon
+        action_dim = self.ac_dim
+        B = batch["actions"].shape[0]
+        
+        
+        info = super(DiffusionPolicyUNet, self).train_on_batch_functional(batch, model_weights, model_buffers, timesteps)
+        actions = batch["actions"]
+        
+        # encode obs
+        inputs = {
+            "obs": batch["obs"],
+            "goal": batch["goal_obs"]
+        }
+        for k in self.obs_shapes:
+            # first two dimensions should be [B, T] for inputs
+            assert inputs["obs"][k].ndim - 2 == len(self.obs_shapes[k])
+        
+        obs_features = TensorUtils.time_distributed(inputs, self.nets["policy"]["obs_encoder"], inputs_as_kwargs=True)
+        assert obs_features.ndim == 3  # [B, T, D]
+
+        obs_cond = obs_features.flatten(start_dim=1)
+        
+        # sample noise to add to actions
+        noise = torch.randn(actions.shape, device=self.device)
+        
+        # sample a diffusion iteration for each data point
+        timesteps = timesteps.long()
+        
+        # add noise to the clean actions according to the noise magnitude at each diffusion iteration
+        # (this is the forward diffusion process)
+        noisy_actions = self.noise_scheduler.add_noise(
+            actions, noise, timesteps)
+        
+        # predict the noise residual
+        noise_pred = self.nets["policy"]["noise_pred_net"](
+            noisy_actions, timesteps, global_cond=obs_cond)
+        
+        noise_pred: torch.Tensor = torch.func.functional_call(
+            self.nets["policy"]["noise_pred_net"],
+            (model_weights, model_buffers),
+            (noisy_actions, timesteps),
+            {
+                "global_cond": obs_cond
+            }
+        )
+            
+        # L2 loss
+        loss = F.mse_loss(noise_pred, noise)
+            
+        return loss
+    
     def log_info(self, info):
         """
         Process info dictionary from @train_on_batch to summarize

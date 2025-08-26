@@ -275,6 +275,25 @@ class Algo(object):
         assert validate or self.nets.training
         return OrderedDict()
 
+    def train_on_batch_functional(self, batch, *args, **kwargs):
+        """
+        Training on a single batch of data.
+
+        Args:
+            batch (dict): dictionary with torch.Tensors sampled
+                from a data loader and filtered by @process_batch_for_training
+
+            epoch (int): epoch number - required by some Algos that need
+                to perform staged training and early stopping
+
+            validate (bool): if True, don't perform any learning updates.
+
+        Returns:
+            info (dict): dictionary of relevant inputs, outputs, and losses
+                that might be relevant for logging
+        """
+        return OrderedDict()
+
     def on_gradient_step(self):
         """
         Called after each gradient step.
@@ -386,6 +405,19 @@ class PolicyAlgo(Algo):
         """
         raise NotImplementedError
     
+    @property
+    def parameters(self):
+        return self.nets.parameters
+    
+    @property
+    def named_parameters(self):
+        return self.nets.named_parameters
+
+    def load_state_dict(self, checkpoint):
+        self.nets.load_state_dict(checkpoint)
+
+    def eval(self):
+        self.nets.eval()
 
 class ValueAlgo(Algo):
     """

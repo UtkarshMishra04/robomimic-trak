@@ -57,6 +57,7 @@ class BaseConfig(Config):
         self.algo_name = type(self).ALGO_NAME
 
         self.experiment_config()
+        self.trak_config()
         self.train_config()
         self.algo_config()
         self.observation_config()
@@ -237,6 +238,14 @@ class BaseConfig(Config):
         self.train.seed = 1             # seed for training (for reproducibility)
 
         self.train.max_grad_norm = None  # clip gradient norms (see `backprop_for_loss` function in torch_utils.py) 
+
+    def trak_config(self):
+        self.trak.model_keys = None
+        self.trak.proj_dim = 4000
+        self.trak.proj_max_batch_size = 32
+        self.trak.lambda_reg = 0.0
+        self.trak.use_half_precision = False
+        self.trak.num_timesteps = 64
 
     def algo_config(self):
         """

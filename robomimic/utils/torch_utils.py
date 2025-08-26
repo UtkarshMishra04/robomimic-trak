@@ -1,12 +1,25 @@
 """
 This file contains some PyTorch utilities.
 """
+from typing import Dict, Callable, List
 import numpy as np
 import math
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
 
+
+def dict_apply(
+        x: Dict[str, torch.Tensor], 
+        func: Callable[[torch.Tensor], torch.Tensor]
+        ) -> Dict[str, torch.Tensor]:
+    result = dict()
+    for key, value in x.items():
+        if isinstance(value, dict):
+            result[key] = dict_apply(value, func)
+        else:
+            result[key] = func(value)
+    return result
 
 def soft_update(source, target, tau):
     """
