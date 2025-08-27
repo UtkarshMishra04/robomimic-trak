@@ -474,7 +474,10 @@ def train(config, device, resume=False):
                             (num_samples, config.trak.num_timesteps)
                         ).long()
                     # Featurize train batch.
-                    batch = TorchUtils.dict_apply(batch, lambda x: torch.from_numpy(x).to(device))
+                    for k, v in batch.items():
+                        print(k, type(v))
+
+                    batch = TorchUtils.dict_apply(batch, lambda x: x.to(device))
                     traker.featurize(batch, num_samples=num_samples)    
 
             # Featurize training set.
