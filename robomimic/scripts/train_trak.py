@@ -257,7 +257,7 @@ def train(config, device, resume=False):
     traker = trak.TRAKer(
         model=model,
         task=PolicyFunctionalModelOutput,
-        train_set_size=train_set_size + holdout_set_size,
+        train_set_size=train_set_size,
         gradient_computer=PolicyFunctionalGradientComputer,
         device=device,
         grad_wrt=grad_wrt,
@@ -484,12 +484,13 @@ def train(config, device, resume=False):
             # Featurize training set.
             featurize_dataset(train_loader)
             hessian_lim = None
-
             # # Optionally featurize holdout set.
             # featurize_dataset(validset, dataset_name="valid")
             # hessian_lim = train_set_size
 
             traker.finalize_features(model_ids=model_ids)
+
+        # todo setup scoring on val
 
         # always save latest model for resume functionality
         print("\nsaving latest model at {}...\n".format(latest_model_path))
