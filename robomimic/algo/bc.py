@@ -352,6 +352,8 @@ class BC_Gaussian(BC):
     
     def _functional_forward_training(self, batch, model_weights, model_buffers):
 
+        func_holder = self.nets["policy"].forward
+        self.nets["policy"].forward = self.nets["policy"].forward_train
         dist = torch.func.functional_call(
             self.nets["policy"],
             (model_weights, model_buffers),
@@ -360,7 +362,7 @@ class BC_Gaussian(BC):
                 "goal_dict": batch["goal_obs"] if "goal_obs" in batch else None
             }
         )
-
+        self.nets["policy"].forward =  func_holder
         log_probs = dist.log_prob(batch["actions"])
 
         return log_probs
@@ -702,6 +704,8 @@ class BC_RNN_GMM(BC_RNN):
 
     def _functional_forward_training(self, batch, model_weights, model_buffers):
         # Use the policy module directly, then call log_prob on the result
+        func_holder = self.nets["policy"].forward
+        self.nets["policy"].forward = self.nets["policy"].forward_train
         dist = torch.func.functional_call(
             self.nets["policy"],
             (model_weights, model_buffers),
@@ -710,6 +714,8 @@ class BC_RNN_GMM(BC_RNN):
                 "goal_dict": batch["goal_obs"] if "goal_obs" in batch else None
             }
         )
+        self.nets["policy"].forward =  func_holder
+
         log_probs = dist.log_prob(batch["action"])
         print(log_probs.shape)
         # Squeeze singleton time dimension if present
