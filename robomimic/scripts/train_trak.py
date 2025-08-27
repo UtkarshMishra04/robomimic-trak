@@ -489,7 +489,7 @@ def train(config, device, resume=False):
             # featurize_dataset(validset, dataset_name="valid")
             # hessian_lim = train_set_size
 
-            traker.finalize_features(model_ids=model_ids, hessian_lim=hessian_lim)
+            traker.finalize_features(model_ids=model_ids)
 
         # always save latest model for resume functionality
         print("\nsaving latest model at {}...\n".format(latest_model_path))
