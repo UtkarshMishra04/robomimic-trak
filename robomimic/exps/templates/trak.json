@@ -38,8 +38,8 @@
         "ckpt_path": null
     },
     "train": {
-        "data": "",
-        "output_dir": "../bc_trained_models/core/bc/can/ph/low_dim/trained_models",
+        "data": "/data/scheng77/projects/gensim/robomimic-trak/robomimic/data/low_dim.hdf5",
+        "output_dir": "../trak_output/trained_models",
         "normalize_weights_by_ds_size": false,
         "num_data_workers": 0,
         "hdf5_cache_mode": "all",
