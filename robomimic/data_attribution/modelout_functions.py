@@ -29,7 +29,7 @@ class PolicyFunctionalModelOutput(AbstractModelOutput):
 
         # Batchify inputs.
         batch = {
-            "action": action.unsqueeze(0).to(torch.float32),
+            "actions": action.unsqueeze(0).to(torch.float32),
             "obs": TorchUtils.dict_apply(obs, lambda x: x.unsqueeze(0).to(torch.float32))
         }
 

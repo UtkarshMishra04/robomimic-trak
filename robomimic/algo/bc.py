@@ -224,7 +224,7 @@ class BC(PolicyAlgo):
             losses (dict): dictionary of losses computed over the batch
         """
         losses = OrderedDict()
-        a_target = batch["action"]
+        a_target = batch["actions"]
         actions = predictions
         losses["l2_loss"] = nn.MSELoss()(actions, a_target)
         losses["l1_loss"] = nn.SmoothL1Loss()(actions, a_target)
@@ -363,7 +363,7 @@ class BC_Gaussian(BC):
             }
         )
         self.nets["policy"].forward =  func_holder
-        log_probs = dist.log_prob(batch["action"])
+        log_probs = dist.log_prob(batch["actions"])
 
         return log_probs
 
@@ -716,7 +716,7 @@ class BC_RNN_GMM(BC_RNN):
         )
         self.nets["policy"].forward =  func_holder
 
-        log_probs = dist.log_prob(batch["action"])
+        log_probs = dist.log_prob(batch["actions"])
         print(log_probs.shape)
         # Squeeze singleton time dimension if present
         if log_probs.dim() == 3 and log_probs.shape[1] == 1:
