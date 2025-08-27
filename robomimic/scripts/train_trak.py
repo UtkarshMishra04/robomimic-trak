@@ -473,9 +473,10 @@ def train(config, device, resume=False):
                             model.noise_scheduler.config.num_train_timesteps, 
                             (num_samples, config.trak.num_timesteps)
                         ).long()
+
                     # Featurize train batch.
-                    for k, v in batch.items():
-                        print(k, type(v))
+                    # for k, v in batch.items():
+                    #     print(k, type(v))
 
                     batch = TorchUtils.dict_apply(batch, lambda x: x.to(device))
                     traker.featurize(batch, num_samples=num_samples)    
@@ -484,9 +485,9 @@ def train(config, device, resume=False):
             featurize_dataset(train_loader)
             hessian_lim = None
 
-            # Optionally featurize holdout set.
-            featurize_dataset(validset, dataset_name="valid")
-            hessian_lim = train_set_size
+            # # Optionally featurize holdout set.
+            # featurize_dataset(validset, dataset_name="valid")
+            # hessian_lim = train_set_size
 
             traker.finalize_features(model_ids=model_ids, hessian_lim=hessian_lim)
 
