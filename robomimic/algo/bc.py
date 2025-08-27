@@ -363,7 +363,7 @@ class BC_Gaussian(BC):
             }
         )
         self.nets["policy"].forward =  func_holder
-        log_probs = dist.log_prob(batch["actions"])
+        log_probs = dist.log_prob(batch["action"])
 
         return log_probs
 
