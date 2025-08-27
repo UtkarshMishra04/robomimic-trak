@@ -490,6 +490,7 @@ def train(config, device, resume=False):
 
             traker.finalize_features(model_ids=model_ids)
 
+        # todo figure out why cannot finalize train set
         # todo setup scoring on val
 
         # always save latest model for resume functionality
