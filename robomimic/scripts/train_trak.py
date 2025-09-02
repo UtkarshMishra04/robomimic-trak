@@ -460,7 +460,7 @@ def train(config, device, resume=False):
                 action_normalization_stats=action_normalization_stats,
             )
 
-            if epoch > config.train.num_epochs * 0.8:
+            if epoch > config.train.num_epochs - 10:
                 model_id = epoch
                 traker.load_checkpoint(model.serialize()["nets"], model_id=model_id)
                 model_ids.append(model_id)
