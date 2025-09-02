@@ -309,6 +309,22 @@ def train(config, device, resume=False):
         print("resuming training from epoch {}".format(start_epoch))
         print("*" * 50)
 
+    grad_wrt = get_parameter_names(model,
+                                   config.trak.model_keys) if config.trak.model_keys is not None else None
+    traker = trak.TRAKer(
+        model=model,
+        task=PolicyFunctionalModelOutput,
+        train_set_size=train_set_size,
+        gradient_computer=PolicyFunctionalGradientComputer,
+        device=device,
+        grad_wrt=grad_wrt,
+        proj_dim=config.trak.proj_dim,
+        proj_max_batch_size=config.trak.proj_max_batch_size,
+        lambda_reg=config.trak.lambda_reg,
+        save_dir=str(trak_dir),
+        use_half_precision=config.trak.use_half_precision,
+    )
+
     model_ids = []
     for epoch in range(start_epoch, config.train.num_epochs + 1):
         step_log = TrainUtils.run_epoch(
@@ -444,53 +460,39 @@ def train(config, device, resume=False):
                 action_normalization_stats=action_normalization_stats,
             )
 
-            grad_wrt = get_parameter_names(model,
-                                           config.trak.model_keys) if config.trak.model_keys is not None else None
-            traker = trak.TRAKer(
-                model=model,
-                task=PolicyFunctionalModelOutput,
-                train_set_size=train_set_size,
-                gradient_computer=PolicyFunctionalGradientComputer,
-                device=device,
-                grad_wrt=grad_wrt,
-                proj_dim=config.trak.proj_dim,
-                proj_max_batch_size=config.trak.proj_max_batch_size,
-                lambda_reg=config.trak.lambda_reg,
-                save_dir=str(trak_dir),
-                use_half_precision=config.trak.use_half_precision,
-            )
+            if epoch > config.train.num_epochs * 0.8:
+                model_id = epoch
+                traker.load_checkpoint(model.serialize()["nets"], model_id=model_id)
+                model_ids.append(model_id)
 
-            model_id = epoch
-            traker.load_checkpoint(model.serialize()["nets"], model_id=0)
-            model_ids.append(model_id)
+                def featurize_dataset(dataloader: DataLoader, dataset_name: str = "train") -> None:
+                    """Featurize dataset wrapped in dataloader."""
+                    for batch in tqdm.tqdm(dataloader, desc=f"Featurizing {dataset_name} set"):
+                        num_samples = batch["actions"].shape[0]
+                        if isinstance(model, DiffusionPolicyUNet):
+                            # Sample timesteps.
+                            batch["timesteps"] = torch.randint(
+                                model.noise_scheduler.config.num_train_timesteps,
+                                (num_samples, config.trak.num_timesteps)
+                            ).long()
 
-            def featurize_dataset(dataloader: DataLoader, dataset_name: str = "train") -> None:
-                """Featurize dataset wrapped in dataloader."""
-                for batch in tqdm.tqdm(dataloader, desc=f"Featurizing {dataset_name} set"):
-                    num_samples = batch["actions"].shape[0]
-                    if isinstance(model, DiffusionPolicyUNet):
-                        # Sample timesteps.
-                        batch["timesteps"] = torch.randint(
-                            model.noise_scheduler.config.num_train_timesteps, 
-                            (num_samples, config.trak.num_timesteps)
-                        ).long()
+                        # Featurize train batch.
+                        # for k, v in batch.items():
+                        #     print(k, type(v))
 
-                    # Featurize train batch.
-                    # for k, v in batch.items():
-                    #     print(k, type(v))
+                        batch = TorchUtils.dict_apply(batch, lambda x: x.to(device))
+                        traker.featurize(batch, num_samples=num_samples)
 
-                    batch = TorchUtils.dict_apply(batch, lambda x: x.to(device))
-                    traker.featurize(batch, num_samples=num_samples)    
+                # Featurize training set.
 
-            # Featurize training set.
-            featurize_dataset(train_loader)
-            hessian_lim = None
-            # # Optionally featurize holdout set.
-            # featurize_dataset(validset, dataset_name="valid")
-            # hessian_lim = train_set_size
+                featurize_dataset(train_loader)
+                hessian_lim = None
+                # # Optionally featurize holdout set.
+                # featurize_dataset(validset, dataset_name="valid")
+                # hessian_lim = train_set_size
 
-            traker.finalize_features()
 
+        traker.finalize_features(model_ids)
         # todo setup scoring on val
 
         # always save latest model for resume functionality
