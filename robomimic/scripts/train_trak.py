@@ -516,11 +516,11 @@ def train(config, device, resume=False):
         print("\nEpoch {} Memory Usage: {} MB\n".format(epoch, mem_usage))
 
     traker.finalize_features(model_ids)
-
+    exp_name = "test_exp"
     traker.start_scoring_checkpoint(
         checkpoint=model.serialize()["nets"],
         model_id=model_id,
-        exp_name='test_exp',
+        exp_name=exp_name,
         num_targets=len(validset)  # The total number of examples you will score
     )
 
@@ -536,7 +536,7 @@ def train(config, device, resume=False):
         batch = TorchUtils.dict_apply(batch, lambda x: x.to(device))
         traker.score(batch=batch, num_samples=num_samples)
 
-    scores = traker.finalize_scores(exp_name="trak_scores")
+    scores = traker.finalize_scores(exp_name=exp_name)
 
     # terminate logging
     data_logger.close()
