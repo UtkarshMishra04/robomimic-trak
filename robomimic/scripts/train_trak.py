@@ -492,9 +492,6 @@ def train(config, device, resume=False):
                 # hessian_lim = train_set_size
 
 
-        traker.finalize_features(model_ids)
-        # todo setup scoring on val
-
         # always save latest model for resume functionality
         print("\nsaving latest model at {}...\n".format(latest_model_path))
         TrainUtils.save_model(
@@ -517,6 +514,9 @@ def train(config, device, resume=False):
         mem_usage = int(process.memory_info().rss / 1000000)
         data_logger.record("System/RAM Usage (MB)", mem_usage, epoch)
         print("\nEpoch {} Memory Usage: {} MB\n".format(epoch, mem_usage))
+
+    traker.finalize_features(model_ids)
+    # todo setup scoring on val
 
     # terminate logging
     data_logger.close()
