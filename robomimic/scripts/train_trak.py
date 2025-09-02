@@ -517,9 +517,18 @@ def train(config, device, resume=False):
 
     traker.finalize_features(model_ids)
 
-    # todo setup scoring on val
     for batch in valid_loader:
-        traker.score(batch=batch)
+        num_samples = batch["actions"].shape[0]
+        if isinstance(model, DiffusionPolicyUNet):
+            # Sample timesteps.
+            batch["timesteps"] = torch.randint(
+                model.noise_scheduler.config.num_train_timesteps,
+                (num_samples, config.trak.num_timesteps)
+            ).long()
+
+        batch = TorchUtils.dict_apply(batch, lambda x: x.to(device))
+        traker.score(batch=batch, num_samples=num_samples)
+
     scores = traker.finalize_scores(exp_name="trak_scores")
 
     # terminate logging
