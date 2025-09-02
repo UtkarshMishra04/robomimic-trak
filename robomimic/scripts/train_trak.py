@@ -252,21 +252,6 @@ def train(config, device, resume=False):
         device=device
     )
 
-    grad_wrt = get_parameter_names(model, config.trak.model_keys) if config.trak.model_keys is not None else None
-
-    traker = trak.TRAKer(
-        model=model,
-        task=PolicyFunctionalModelOutput,
-        train_set_size=train_set_size,
-        gradient_computer=PolicyFunctionalGradientComputer,
-        device=device,
-        grad_wrt=grad_wrt,
-        proj_dim=config.trak.proj_dim,
-        proj_max_batch_size=config.trak.proj_max_batch_size,
-        lambda_reg=config.trak.lambda_reg,
-        save_dir=str(trak_dir),
-        use_half_precision=config.trak.use_half_precision,
-    )
 
     if resume:
         # load ckpt dict
@@ -459,6 +444,22 @@ def train(config, device, resume=False):
                 action_normalization_stats=action_normalization_stats,
             )
 
+            grad_wrt = get_parameter_names(model,
+                                           config.trak.model_keys) if config.trak.model_keys is not None else None
+            traker = trak.TRAKer(
+                model=model,
+                task=PolicyFunctionalModelOutput,
+                train_set_size=train_set_size,
+                gradient_computer=PolicyFunctionalGradientComputer,
+                device=device,
+                grad_wrt=grad_wrt,
+                proj_dim=config.trak.proj_dim,
+                proj_max_batch_size=config.trak.proj_max_batch_size,
+                lambda_reg=config.trak.lambda_reg,
+                save_dir=str(trak_dir),
+                use_half_precision=config.trak.use_half_precision,
+            )
+
             model_id = epoch
             traker.load_checkpoint(model.serialize()["nets"], model_id=model_id)
             model_ids.append(model_id)
@@ -490,7 +491,6 @@ def train(config, device, resume=False):
 
             traker.finalize_features(model_ids=model_ids)
 
-        # todo figure out why cannot finalize train set
         # todo setup scoring on val
 
         # always save latest model for resume functionality
