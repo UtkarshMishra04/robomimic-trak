@@ -461,7 +461,7 @@ def train(config, device, resume=False):
             )
 
             model_id = epoch
-            traker.load_checkpoint(model.serialize()["nets"], model_id=model_id)
+            traker.load_checkpoint(model.serialize()["nets"], model_id=0)
             model_ids.append(model_id)
 
             def featurize_dataset(dataloader: DataLoader, dataset_name: str = "train") -> None:
@@ -489,7 +489,7 @@ def train(config, device, resume=False):
             # featurize_dataset(validset, dataset_name="valid")
             # hessian_lim = train_set_size
 
-            traker.finalize_features(model_ids=model_ids)
+            traker.finalize_features()
 
         # todo setup scoring on val
 
