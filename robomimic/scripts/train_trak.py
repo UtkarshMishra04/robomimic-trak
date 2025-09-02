@@ -524,7 +524,7 @@ def train(config, device, resume=False):
         num_targets=len(validset)  # The total number of examples you will score
     )
 
-    for batch in valid_loader:
+    for batch in train_loader:
         num_samples = batch["actions"].shape[0]
         if isinstance(model, DiffusionPolicyUNet):
             # Sample timesteps.
@@ -533,9 +533,9 @@ def train(config, device, resume=False):
                 (num_samples, config.trak.num_timesteps)
             ).long()
 
-        print(batch, '?')
         batch = TorchUtils.dict_apply(batch, lambda x: x.to(device))
         traker.score(batch=batch, num_samples=num_samples)
+
 
     scores = traker.finalize_scores(exp_name=exp_name)
 
