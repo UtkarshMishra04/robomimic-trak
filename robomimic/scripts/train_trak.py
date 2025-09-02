@@ -194,7 +194,7 @@ def train(config, device, resume=False):
         batch_size=config.train.batch_size,
         shuffle=(train_sampler is None),
         num_workers=config.train.num_data_workers,
-        drop_last=True
+        drop_last=False
     )
 
     if config.experiment.validate:
