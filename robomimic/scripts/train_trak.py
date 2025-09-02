@@ -521,7 +521,7 @@ def train(config, device, resume=False):
         checkpoint=model.serialize()["nets"],
         model_id=model_id,
         exp_name=exp_name,
-        num_targets=len(validset)  # The total number of examples you will score
+        num_targets=len(trainset)  # The total number of examples you will score
     )
 
     for batch in train_loader:
