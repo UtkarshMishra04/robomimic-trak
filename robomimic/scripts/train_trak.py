@@ -533,6 +533,7 @@ def train(config, device, resume=False):
                 (num_samples, config.trak.num_timesteps)
             ).long()
 
+        print(batch, '?')
         batch = TorchUtils.dict_apply(batch, lambda x: x.to(device))
         traker.score(batch=batch, num_samples=num_samples)
 
