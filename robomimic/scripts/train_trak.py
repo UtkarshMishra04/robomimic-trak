@@ -517,6 +517,13 @@ def train(config, device, resume=False):
 
     traker.finalize_features(model_ids)
 
+    traker.start_scoring_checkpoint(
+        checkpoint=model.serialize()["nets"],
+        model_id=model_id,
+        exp_name='test_exp',
+        num_targets=len(validset)  # The total number of examples you will score
+    )
+
     for batch in valid_loader:
         num_samples = batch["actions"].shape[0]
         if isinstance(model, DiffusionPolicyUNet):
