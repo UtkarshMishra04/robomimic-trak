@@ -516,7 +516,11 @@ def train(config, device, resume=False):
         print("\nEpoch {} Memory Usage: {} MB\n".format(epoch, mem_usage))
 
     traker.finalize_features(model_ids)
+
     # todo setup scoring on val
+    for batch in valid_loader:
+        traker.score(batch=batch)
+    scores = traker.finalize_scores(exp_name="trak_scores")
 
     # terminate logging
     data_logger.close()
