@@ -326,6 +326,7 @@ def train(config, device, resume=False):
     )
 
     model_ids = []
+    ckpt_list = []
     for epoch in range(start_epoch, config.train.num_epochs + 1):
         step_log = TrainUtils.run_epoch(
             model=model,
@@ -460,11 +461,11 @@ def train(config, device, resume=False):
                 action_normalization_stats=action_normalization_stats,
             )
 
-            if epoch > config.train.num_epochs - 10:
+            if epoch > config.train.num_epochs - 5:
                 model_id = epoch
                 traker.load_checkpoint(model.serialize()["nets"], model_id=model_id)
                 model_ids.append(model_id)
-
+                ckpt_list.append(model.serialize()["nets"])
                 def featurize_dataset(dataloader: DataLoader, dataset_name: str = "train") -> None:
                     """Featurize dataset wrapped in dataloader."""
                     for batch in tqdm.tqdm(dataloader, desc=f"Featurizing {dataset_name} set"):
@@ -492,6 +493,8 @@ def train(config, device, resume=False):
                 # hessian_lim = train_set_size
 
 
+
+
         # always save latest model for resume functionality
         print("\nsaving latest model at {}...\n".format(latest_model_path))
         TrainUtils.save_model(
@@ -516,28 +519,29 @@ def train(config, device, resume=False):
         print("\nEpoch {} Memory Usage: {} MB\n".format(epoch, mem_usage))
 
     traker.finalize_features(model_ids)
-    exp_name = "test_exp"
-    traker.start_scoring_checkpoint(
-        checkpoint=model.serialize()["nets"],
-        model_id=model_id,
-        exp_name=exp_name,
-        num_targets=len(trainset)  # The total number of examples you will score
-    )
 
-    for batch in train_loader:
-        num_samples = batch["actions"].shape[0]
-        if isinstance(model, DiffusionPolicyUNet):
-            # Sample timesteps.
-            batch["timesteps"] = torch.randint(
-                model.noise_scheduler.config.num_train_timesteps,
-                (num_samples, config.trak.num_timesteps)
-            ).long()
+    for model_id, ckpt in zip(model_ids, ckpt_list):
 
-        batch = TorchUtils.dict_apply(batch, lambda x: x.to(device))
-        traker.score(batch=batch, num_samples=num_samples)
+        exp_name = "test_exp"
+        traker.start_scoring_checkpoint(
+            checkpoint=model.serialize()["nets"],
+            model_id=model_id,
+            exp_name=exp_name,
+            num_targets=len(trainset)  # The total number of examples you will score
+        )
 
+        for batch in train_loader:
+            num_samples = batch["actions"].shape[0]
+            if isinstance(model, DiffusionPolicyUNet):
+                # Sample timesteps.
+                batch["timesteps"] = torch.randint(
+                    model.noise_scheduler.config.num_train_timesteps,
+                    (num_samples, config.trak.num_timesteps)
+                ).long()
+            batch = TorchUtils.dict_apply(batch, lambda x: x.to(device))
+            traker.score(batch=batch, num_samples=num_samples)
 
-    scores = traker.finalize_scores(exp_name=exp_name)
+        scores = traker.finalize_scores(exp_name=exp_name)
 
     # terminate logging
     data_logger.close()
