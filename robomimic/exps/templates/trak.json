@@ -38,9 +38,9 @@
         "ckpt_path": null
     },
     "train": {
-        "data": "/coc/flash8/gensim_shared/datarater_data/mug_dataset_key/45_75_-15_15.hdf5",
+        "data": "/data/scheng77/projects/gensim/robomimic-trak/robomimic/data/low_dim.hdf5",
         "val_data": [
-            "/coc/flash8/gensim_shared/datarater_data/mug_dataset_key/60_75_0_15.hdf5"
+            "/data/scheng77/projects/gensim/robomimic-trak/robomimic/data/low_dim.hdf5"
         ],
         "output_dir": "../trak_output/trained_models",
         "normalize_weights_by_ds_size": false,
