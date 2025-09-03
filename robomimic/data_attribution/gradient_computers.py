@@ -74,18 +74,10 @@ class PolicyFunctionalGradientComputer(AbstractGradientComputer):
         """Load model parameters and filter by grad_wrt."""
         # Get functional weights and buffers.
 
-        if isinstance(model, DiffusionPolicyUNet):
-            nets = model.nets["policy"]["noise_pred_net"]
-            obs_nets = model.nets["policy"]["obs_encoder"]
-        else:
-            nets = model.nets["policy"]
+        nets = model.nets
 
         self.func_weights = dict(nets.named_parameters())
         self.func_buffers = dict(nets.named_buffers())
-
-        if isinstance(model, DiffusionPolicyUNet):
-            self.func_weights.update(dict(obs_nets.named_parameters()))
-            self.func_buffers.update(dict(obs_nets.named_buffers()))
 
         # Filter weights based on grad_wrt.
         if self.grad_wrt is not None:
@@ -99,13 +91,13 @@ class PolicyFunctionalGradientComputer(AbstractGradientComputer):
 
     def compute_loss_grad(self, batch: Dict[str, Tensor]) -> Tensor:
         """Computes the gradient of the loss with respect to the model output."""
-        return self.modelout_fn.get_out_to_loss_grad.__get__(self.modelout_fn)(self.model, self.func_weights, self.func_buffers, batch)
+        return self.modelout_fn.get_out_to_loss_grad(self.model, self.func_weights, self.func_buffers, batch)
     
     def compute_per_sample_grad(self, batch: Dict[str, Tensor]) -> Tensor:
         """Computes per-sample gradients of the model output function."""
         # Taking the gradient wrt weights (second argument of get_output, hence argnums=1).
         grads_loss = torch.func.grad(
-            self.modelout_fn.get_output.__get__(self.modelout_fn), has_aux=False, argnums=1
+            self.modelout_fn.get_output, has_aux=False, argnums=1
         )
 
         # Extract batch elements.

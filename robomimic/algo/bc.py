@@ -323,6 +323,9 @@ class BC_Gaussian(BC):
 
         self.nets = self.nets.float().to(self.device)
 
+        # setup module nets.forward same as nets["policy"].forward
+        self.nets.forward = self.nets["policy"].forward_train
+
     def _forward_training(self, batch):
         """
         Internal helper function for BC algo class. Compute forward pass
@@ -352,17 +355,14 @@ class BC_Gaussian(BC):
     
     def _functional_forward_training(self, batch, model_weights, model_buffers):
 
-        func_holder = self.nets["policy"].forward
-        self.nets["policy"].forward = self.nets["policy"].forward_train
         dist = torch.func.functional_call(
-            self.nets["policy"],
+            self.nets,
             (model_weights, model_buffers),
             (batch["obs"]),
             {
                 "goal_dict": batch["goal_obs"] if "goal_obs" in batch else None
             }
         )
-        self.nets["policy"].forward =  func_holder
         log_probs = dist.log_prob(batch["actions"])
 
         return log_probs

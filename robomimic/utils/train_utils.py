@@ -137,8 +137,14 @@ def load_data_for_training(config, obs_keys):
 
     return train_dataset, valid_dataset
 
+def load_data_for_validation(config, obs_keys):
 
-def dataset_factory(config, obs_keys, filter_by_attribute=None, dataset_path=None):
+    train_filter_by_attribute = config.train.hdf5_filter_key
+    train_dataset = dataset_factory(config, obs_keys, filter_by_attribute=train_filter_by_attribute, validation=True)
+    return train_dataset, None
+
+
+def dataset_factory(config, obs_keys, filter_by_attribute=None, dataset_path=None, validation=False):
     """
     Create a SequenceDataset instance to pass to a torch DataLoader.
 
@@ -158,15 +164,16 @@ def dataset_factory(config, obs_keys, filter_by_attribute=None, dataset_path=Non
         dataset (SequenceDataset instance): dataset object
     """
     if dataset_path is None:
-        dataset_path = config.train.data
+        dataset_path = config.train.data if not validation else config.train.val_data
 
     # NOTE: currently supporting fixed language embedding per dataset
     ## that is fetched from dataset config and not from file
+    data = config.train.data if not validation else config.train.val_data
     if LangUtils.LANG_EMB_OBS_KEY in obs_keys:
         obs_keys.remove(LangUtils.LANG_EMB_OBS_KEY)
-        ds_langs = [ds_cfg.get("lang", "dummy") for ds_cfg in config.train.data]
+        ds_langs = [ds_cfg.get("lang", "dummy") for ds_cfg in data]
     else:
-        ds_langs = [None for _ in config.train.data]
+        ds_langs = [None for _ in data]
 
     ds_kwargs = dict(
         hdf5_path=dataset_path,
@@ -187,10 +194,16 @@ def dataset_factory(config, obs_keys, filter_by_attribute=None, dataset_path=Non
         filter_by_attribute=filter_by_attribute,
     )
 
-    ds_kwargs["hdf5_path"] = [ds_cfg["path"] for ds_cfg in config.train.data]
-    ds_kwargs["filter_by_attribute"] = [ds_cfg.get("filter_key", filter_by_attribute) for ds_cfg in config.train.data]
-    ds_kwargs["demo_limit"] = [ds_cfg.get("demo_limit", None) for ds_cfg in config.train.data]
-    ds_weights = [ds_cfg.get("weight", 1.0) for ds_cfg in config.train.data]
+    if not validation:
+        ds_kwargs["hdf5_path"] = [ds_cfg["path"] for ds_cfg in config.train.data]
+        ds_kwargs["filter_by_attribute"] = [ds_cfg.get("filter_key", filter_by_attribute) for ds_cfg in config.train.data]
+        ds_kwargs["demo_limit"] = [ds_cfg.get("demo_limit", None) for ds_cfg in config.train.data]
+        ds_weights = [ds_cfg.get("weight", 1.0) for ds_cfg in config.train.data]
+    else:
+        ds_kwargs["hdf5_path"] = [ds_cfg for ds_cfg in config.train.val_data]
+        ds_kwargs["filter_by_attribute"] = [filter_by_attribute for ds_cfg in config.train.val_data]
+        ds_kwargs["demo_limit"] = [None for ds_cfg in config.train.val_data]
+        ds_weights = [1.0 for ds_cfg in config.train.val_data]
 
     meta_ds_kwargs = dict()
 

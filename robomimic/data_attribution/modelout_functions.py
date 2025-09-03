@@ -25,7 +25,7 @@ class PolicyFunctionalModelOutput(AbstractModelOutput):
         goal_obs: torch.Tensor = None
     ) -> torch.Tensor:
         
-        print("Using functional forward pass for policy model.")
+        # print("Using functional forward pass for policy model.")
 
         # Batchify inputs.
         batch = {
