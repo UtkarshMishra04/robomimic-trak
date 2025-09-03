@@ -146,7 +146,8 @@ class BaseConfig(Config):
         # - "filter_key" (str)  : (optional) key to use for filtering the dataset, defaults to None
         # - "demo_limit" (int)  :   (optional) limit the number of demos to use for training
         # - "weight" (float)    :   (optional) weight for the dataset, defaults to 1.0
-        self.train.data = None                                      
+        self.train.data = None    
+        self.train.val_data = None  # List of hdf5 datasets to use for validation (same format as self.train.data)                                  
 
         # Write all results to this directory. A new folder with the timestamp will be created
         # in this directory, and it will contain three subfolders - "log", "models", and "videos".

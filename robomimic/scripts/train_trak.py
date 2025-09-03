@@ -49,6 +49,41 @@ from robomimic.data_attribution.trak_util import get_parameter_names
 from robomimic.data_attribution.modelout_functions import PolicyFunctionalModelOutput
 from robomimic.data_attribution.gradient_computers import PolicyFunctionalGradientComputer
 
+def process_config_data(config, data):
+    env_meta_list = []
+    shape_meta_list = []
+
+    if isinstance(data, str):
+        # if only a single dataset is provided, convert to list
+        with config.values_unlocked():
+            config.train.data = [{"path": data}]
+    for dataset_cfg in data:
+        dataset_path = os.path.expanduser(dataset_cfg["path"])
+        if not os.path.exists(dataset_path):
+            raise Exception("Dataset at provided path {} not found!".format(dataset_path))
+
+        # load basic metadata from training file
+        print("\n============= Loaded Environment Metadata =============")
+        env_meta = FileUtils.get_env_metadata_from_dataset(dataset_path=dataset_path)
+
+        # populate language instruction for env in env_meta
+        env_meta["lang"] = dataset_cfg.get("lang", "dummy")
+
+        # update env meta if applicable
+        from robomimic.utils.python_utils import deep_update
+        deep_update(env_meta, config.experiment.env_meta_update_dict)
+        env_meta_list.append(env_meta)
+
+        shape_meta = FileUtils.get_shape_metadata_from_dataset(
+            dataset_config=dataset_cfg,
+            action_keys=config.train.action_keys,
+            all_obs_keys=config.all_obs_keys,
+            verbose=True
+        )
+        shape_meta_list.append(shape_meta)
+
+    return shape_meta, shape_meta_list, env_meta_list
+
 
 def train(config, device, resume=False):
     """
@@ -82,36 +117,12 @@ def train(config, device, resume=False):
     ObsUtils.initialize_obs_utils_with_config(config)
 
     # extract the metadata and shape metadata across all datasets
-    env_meta_list = []
-    shape_meta_list = []
     if isinstance(config.train.data, str):
         # if only a single dataset is provided, convert to list
         with config.values_unlocked():
             config.train.data = [{"path": config.train.data}]
-    for dataset_cfg in config.train.data:
-        dataset_path = os.path.expanduser(dataset_cfg["path"])
-        if not os.path.exists(dataset_path):
-            raise Exception("Dataset at provided path {} not found!".format(dataset_path))
 
-        # load basic metadata from training file
-        print("\n============= Loaded Environment Metadata =============")
-        env_meta = FileUtils.get_env_metadata_from_dataset(dataset_path=dataset_path)
-
-        # populate language instruction for env in env_meta
-        env_meta["lang"] = dataset_cfg.get("lang", "dummy")
-
-        # update env meta if applicable
-        from robomimic.utils.python_utils import deep_update
-        deep_update(env_meta, config.experiment.env_meta_update_dict)
-        env_meta_list.append(env_meta)
-
-        shape_meta = FileUtils.get_shape_metadata_from_dataset(
-            dataset_config=dataset_cfg,
-            action_keys=config.train.action_keys,
-            all_obs_keys=config.all_obs_keys,
-            verbose=True
-        )
-        shape_meta_list.append(shape_meta)
+    shape_meta, shape_meta_list, env_meta_list = process_config_data(config, config.train.data)
 
     if config.experiment.env is not None:
         # if an environment name is specified, just use this env using the first dataset's metadata
@@ -164,9 +175,13 @@ def train(config, device, resume=False):
     print("")
 
     # load training data
-    trainset, validset = TrainUtils.load_data_for_training(
+    trainset, _ = TrainUtils.load_data_for_training(
         config, obs_keys=shape_meta["all_obs_keys"])
     train_sampler = trainset.get_dataset_sampler()
+
+    validset, _ = TrainUtils.load_data_for_validation(
+        config, obs_keys=shape_meta["all_obs_keys"])
+    valid_sampler = validset.get_dataset_sampler() if validset is not None else None
 
     train_set_size = len(trainset)
     holdout_set_size = len(validset) if validset is not None else 0
@@ -194,7 +209,16 @@ def train(config, device, resume=False):
         batch_size=config.train.batch_size,
         shuffle=(train_sampler is None),
         num_workers=config.train.num_data_workers,
-        drop_last=True
+        drop_last=False
+    )
+
+    val_loader = DataLoader(
+        dataset=validset,
+        sampler=valid_sampler,
+        batch_size=config.train.batch_size,
+        shuffle=(valid_sampler is None),
+        num_workers=config.train.num_data_workers,
+        drop_last=False
     )
 
     if config.experiment.validate:
@@ -252,21 +276,6 @@ def train(config, device, resume=False):
         device=device
     )
 
-    grad_wrt = get_parameter_names(model, config.trak.model_keys) if config.trak.model_keys is not None else None
-
-    traker = trak.TRAKer(
-        model=model,
-        task=PolicyFunctionalModelOutput,
-        train_set_size=train_set_size + holdout_set_size,
-        gradient_computer=PolicyFunctionalGradientComputer,
-        device=device,
-        grad_wrt=grad_wrt,
-        proj_dim=config.trak.proj_dim,
-        proj_max_batch_size=config.trak.proj_max_batch_size,
-        lambda_reg=config.trak.lambda_reg,
-        save_dir=str(trak_dir),
-        use_half_precision=config.trak.use_half_precision,
-    )
 
     if resume:
         # load ckpt dict
@@ -324,7 +333,24 @@ def train(config, device, resume=False):
         print("resuming training from epoch {}".format(start_epoch))
         print("*" * 50)
 
+    grad_wrt = get_parameter_names(model,
+                                   config.trak.model_keys) if config.trak.model_keys is not None else None
+    traker = trak.TRAKer(
+        model=model,
+        task=PolicyFunctionalModelOutput(),
+        train_set_size=train_set_size,
+        gradient_computer=PolicyFunctionalGradientComputer,
+        device=device,
+        grad_wrt=grad_wrt,
+        proj_dim=config.trak.proj_dim,
+        proj_max_batch_size=config.trak.proj_max_batch_size,
+        lambda_reg=config.trak.lambda_reg,
+        save_dir=str(trak_dir),
+        use_half_precision=config.trak.use_half_precision,
+    )
+
     model_ids = []
+    ckpt_list = []
     for epoch in range(start_epoch, config.train.num_epochs + 1):
         step_log = TrainUtils.run_epoch(
             model=model,
@@ -459,33 +485,30 @@ def train(config, device, resume=False):
                 action_normalization_stats=action_normalization_stats,
             )
 
-            model_id = epoch
-            traker.load_checkpoint(model.serialize()["nets"], model_id=model_id)
-            model_ids.append(model_id)
+            if epoch > config.train.num_epochs - 5:
+                model_id = epoch
+                traker.load_checkpoint(model.serialize()["nets"], model_id=model_id)
+                model_ids.append(model_id)
+                ckpt_list.append(model.serialize()["nets"])
+                def featurize_dataset(dataloader: DataLoader, dataset_name: str = "train") -> None:
+                    """Featurize dataset wrapped in dataloader."""
+                    for batch in tqdm.tqdm(dataloader, desc=f"Featurizing {dataset_name} set"):
+                        num_samples = batch["actions"].shape[0]
+                        if isinstance(model, DiffusionPolicyUNet):
+                            # Sample timesteps.
+                            batch["timesteps"] = torch.randint(
+                                model.noise_scheduler.config.num_train_timesteps,
+                                (num_samples, config.trak.num_timesteps)
+                            ).long()
 
-            def featurize_dataset(dataloader: DataLoader, dataset_name: str = "train") -> None:
-                """Featurize dataset wrapped in dataloader."""
-                for batch in tqdm.tqdm(dataloader, desc=f"Featurizing {dataset_name} set"):
-                    num_samples = batch["actions"].shape[0]
-                    if isinstance(model, DiffusionPolicyUNet):
-                        # Sample timesteps.
-                        batch["timesteps"] = torch.randint(
-                            model.noise_scheduler.config.num_train_timesteps, 
-                            (num_samples, config.trak.num_timesteps)
-                        ).long()
-                    # Featurize train batch.
-                    batch = TorchUtils.dict_apply(batch, lambda x: x.to(device))
-                    traker.featurize(batch, num_samples=num_samples)    
+                        batch = TorchUtils.dict_apply(batch, lambda x: x.to(device))
+                        traker.featurize(batch, num_samples=num_samples)
 
-            # Featurize training set.
-            featurize_dataset(train_loader)
-            hessian_lim = None
-
-            # Optionally featurize holdout set.
-            featurize_dataset(validset, dataset_name="valid")
-            hessian_lim = train_set_size
-
-            traker.finalize_features(model_ids=model_ids, hessian_lim=hessian_lim)
+                # Featurize training set and validation set
+                featurize_dataset(train_loader)
+                # featurize_dataset(val_loader, dataset_name="valid")
+                # hessian_lim = train_set_size
+                hessian_lim = train_set_size
 
         # always save latest model for resume functionality
         print("\nsaving latest model at {}...\n".format(latest_model_path))
@@ -509,6 +532,41 @@ def train(config, device, resume=False):
         mem_usage = int(process.memory_info().rss / 1000000)
         data_logger.record("System/RAM Usage (MB)", mem_usage, epoch)
         print("\nEpoch {} Memory Usage: {} MB\n".format(epoch, mem_usage))
+
+        traker.finalize_features(model_ids, hessian_lim=hessian_lim)
+
+        for model_id, ckpt in zip(model_ids, ckpt_list):
+
+            print("Scoring model id {}".format(model_id))
+
+            exp_name = "test_exp"
+            traker.start_scoring_checkpoint(
+                checkpoint=ckpt,
+                model_id=model_id,
+                exp_name=exp_name,
+                num_targets=holdout_set_size  # The total number of examples you will score
+            )
+
+            for batch in tqdm.tqdm(val_loader, desc="Scoring validation set"):
+                num_samples = batch["actions"].shape[0]
+                if isinstance(model, DiffusionPolicyUNet):
+                    # Sample timesteps.
+                    batch["timesteps"] = torch.randint(
+                        model.noise_scheduler.config.num_train_timesteps,
+                        (num_samples, config.trak.num_timesteps)
+                    ).long()
+                batch = TorchUtils.dict_apply(batch, lambda x: x.to(device))
+                traker.score(batch=batch, num_samples=num_samples)
+
+            scores = np.array(
+                traker.finalize_scores(
+                    exp_name=exp_name,
+                    model_ids=[model_id],
+                    allow_skip=False
+                )
+            )
+
+            print("Scores shape:", scores.shape)
 
     # terminate logging
     data_logger.close()

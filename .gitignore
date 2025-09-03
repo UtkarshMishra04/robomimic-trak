@@ -125,3 +125,5 @@ macros_private.py
 robomimic/exps/paper
 datasets/
 *_trained_models/
+
+trak_output/
