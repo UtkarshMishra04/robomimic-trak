@@ -787,6 +787,8 @@ class BC_Transformer(BC):
         )
         self._set_params_from_config()
         self.nets = self.nets.float().to(self.device)
+        self.nets.forward = self.nets["policy"].forward
+
         
     def _set_params_from_config(self):
         """
@@ -857,6 +859,30 @@ class BC_Transformer(BC):
         if not self.supervise_all_steps:
             # only supervise final timestep
             predictions["actions"] = predictions["actions"][:, -1, :]
+        return predictions
+    
+    def _functional_forward_training(self, batch, model_weights, model_buffers):
+        # ensure that transformer context length is consistent with temporal dimension of observations
+        TensorUtils.assert_size_at_dim(
+            batch["obs"], 
+            size=(self.context_length), 
+            dim=1, 
+            msg="Error: expect temporal dimension of obs batch to match transformer context length {}".format(self.context_length),
+        )
+
+        predictions = torch.func.functional_call(
+            self.nets,
+            (model_weights, model_buffers),
+            (batch["obs"], None),
+            {
+                "goal_dict": batch["goal_obs"] if "goal_obs" in batch else None
+            }
+        )
+        if not self.supervise_all_steps:
+            # only use final timestep prediction by making a new distribution with only final timestep.
+            # This essentially does `dists = dists[:, -1]`
+            predictions = predictions[:, -1, :]
+
         return predictions
 
     def get_action(self, obs_dict, goal_dict=None):
