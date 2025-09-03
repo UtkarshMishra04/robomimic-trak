@@ -508,7 +508,7 @@ def train(config, device, resume=False):
                 featurize_dataset(train_loader)
                 # featurize_dataset(val_loader, dataset_name="valid")
                 # hessian_lim = train_set_size
-                hessian_lim = train_set_size
+                # hessian_lim = train_set_size
 
         # always save latest model for resume functionality
         print("\nsaving latest model at {}...\n".format(latest_model_path))
@@ -533,7 +533,9 @@ def train(config, device, resume=False):
         data_logger.record("System/RAM Usage (MB)", mem_usage, epoch)
         print("\nEpoch {} Memory Usage: {} MB\n".format(epoch, mem_usage))
 
-        traker.finalize_features(model_ids, hessian_lim=hessian_lim)
+        traker.finalize_features(model_ids,
+                                 # hessian_lim=hessian_lim,
+                                 )
 
         for model_id, ckpt in zip(model_ids, ckpt_list):
 
