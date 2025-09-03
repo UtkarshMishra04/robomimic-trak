@@ -510,6 +510,7 @@ def train(config, device, resume=False):
                 # hessian_lim = train_set_size
                 # hessian_lim = train_set_size
 
+
         # always save latest model for resume functionality
         print("\nsaving latest model at {}...\n".format(latest_model_path))
         TrainUtils.save_model(
@@ -533,42 +534,42 @@ def train(config, device, resume=False):
         data_logger.record("System/RAM Usage (MB)", mem_usage, epoch)
         print("\nEpoch {} Memory Usage: {} MB\n".format(epoch, mem_usage))
 
-        traker.finalize_features(model_ids,
-                                 # hessian_lim=hessian_lim,
-                                 )
 
-        for model_id, ckpt in zip(model_ids, ckpt_list):
+    traker.finalize_features(model_ids,
+                             # hessian_lim=hessian_lim,
+                             )
+    for model_id, ckpt in zip(model_ids, ckpt_list):
 
-            print("Scoring model id {}".format(model_id))
+        print("Scoring model id {}".format(model_id))
 
-            exp_name = "test_exp"
-            traker.start_scoring_checkpoint(
-                checkpoint=ckpt,
-                model_id=model_id,
+        exp_name = "test_exp"
+        traker.start_scoring_checkpoint(
+            checkpoint=ckpt,
+            model_id=model_id,
+            exp_name=exp_name,
+            num_targets=holdout_set_size  # The total number of examples you will score
+        )
+
+        for batch in tqdm.tqdm(val_loader, desc="Scoring validation set"):
+            num_samples = batch["actions"].shape[0]
+            if isinstance(model, DiffusionPolicyUNet):
+                # Sample timesteps.
+                batch["timesteps"] = torch.randint(
+                    model.noise_scheduler.config.num_train_timesteps,
+                    (num_samples, config.trak.num_timesteps)
+                ).long()
+            batch = TorchUtils.dict_apply(batch, lambda x: x.to(device))
+            traker.score(batch=batch, num_samples=num_samples)
+
+        scores = np.array(
+            traker.finalize_scores(
                 exp_name=exp_name,
-                num_targets=holdout_set_size  # The total number of examples you will score
+                model_ids=[model_id],
+                allow_skip=False
             )
+        )
 
-            for batch in tqdm.tqdm(val_loader, desc="Scoring validation set"):
-                num_samples = batch["actions"].shape[0]
-                if isinstance(model, DiffusionPolicyUNet):
-                    # Sample timesteps.
-                    batch["timesteps"] = torch.randint(
-                        model.noise_scheduler.config.num_train_timesteps,
-                        (num_samples, config.trak.num_timesteps)
-                    ).long()
-                batch = TorchUtils.dict_apply(batch, lambda x: x.to(device))
-                traker.score(batch=batch, num_samples=num_samples)
-
-            scores = np.array(
-                traker.finalize_scores(
-                    exp_name=exp_name,
-                    model_ids=[model_id],
-                    allow_skip=False
-                )
-            )
-
-            print("Scores shape:", scores.shape)
+        print("Scores shape:", scores.shape)
 
     # terminate logging
     data_logger.close()
